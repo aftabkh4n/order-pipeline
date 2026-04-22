@@ -1,0 +1,86 @@
+name: AI Release Notes
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+  generate-release-notes:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_MERGED_AT: ${{ github.event.pull_request.merged_at }}
+        run: |
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | head -20 | tr '\n' ', ')
+          
+          PR_BODY_SAFE="${PR_BODY:-No description provided}"
+
+          PAYLOAD=$(jq -n \
+            --arg model "claude-haiku-4-5-20251001" \
+            --arg pr_num "$PR_NUMBER" \
+            --arg pr_title "$PR_TITLE" \
+            --arg pr_author "$PR_AUTHOR" \
+            --arg pr_merged "$PR_MERGED_AT" \
+            --arg pr_body "$PR_BODY_SAFE" \
+            --arg files "$CHANGED_FILES" \
+            '{
+              model: $model,
+              max_tokens: 1024,
+              messages: [{
+                role: "user",
+                content: ("You are a technical writer generating a changelog entry for an open source .NET MCP Kubernetes Manager project.\n\nPR #" + $pr_num + ": " + $pr_title + "\nAuthor: " + $pr_author + "\nMerged: " + $pr_merged + "\nDescription: " + $pr_body + "\nChanged files: " + $files + "\n\nWrite a concise changelog entry in this exact format:\n## [PR #" + $pr_num + "] " + $pr_title + "\n*" + $pr_merged + " by @" + $pr_author + "*\n\n### Changes\n- bullet points describing what changed\n\n### Files changed\n- list the key files changed\n\nKeep it factual and concise. No marketing language.")
+              }]
+            }')
+
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "$PAYLOAD")
+
+          echo "API Response: $RESPONSE"
+
+          ENTRY=$(echo "$RESPONSE" | jq -r '.content[0].text // "Error: could not generate changelog entry"')
+
+          if [ ! -f CHANGELOG.md ]; then
+            echo "# Changelog" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "All notable changes to MCP Kubernetes Manager are documented here." >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+          fi
+
+          TEMP=$(mktemp)
+          head -4 CHANGELOG.md > "$TEMP"
+          echo "" >> "$TEMP"
+          echo "$ENTRY" >> "$TEMP"
+          echo "" >> "$TEMP"
+          tail -n +5 CHANGELOG.md >> "$TEMP"
+          mv "$TEMP" CHANGELOG.md
+
+      - name: Commit changelog
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "docs: AI-generated changelog for PR #${{ github.event.pull_request.number }}"
+          git push
