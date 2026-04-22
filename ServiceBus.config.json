@@ -1,0 +1,23 @@
+{
+  "UserConfig": {
+    "Namespaces": [
+      {
+        "Name": "order-pipeline-sb",
+        "Queues": [
+          {
+            "Name": "order-fulfilment",
+            "Properties": {
+              "DeadLetteringOnMessageExpiration": false,
+              "DefaultMessageTimeToLive": "PT1H",
+              "LockDuration": "PT1M",
+              "MaxDeliveryCount": 10
+            }
+          }
+        ]
+      }
+    ],
+    "Logging": {
+      "Type": "File"
+    }
+  }
+}

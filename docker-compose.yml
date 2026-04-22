@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
@@ -41,3 +39,26 @@ services:
     environment:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+
+  sql-servicebus:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: order-pipeline-sql-sb
+    environment:
+      SA_PASSWORD: "ServiceBus123!"
+      ACCEPT_EULA: "Y"
+    ports:
+      - "1435:1432"
+
+  servicebus-emulator:
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:latest
+    container_name: order-pipeline-servicebus
+    ports:
+      - "5672:5672"
+    environment:
+      ACCEPT_EULA: "Y"
+      SQL_SERVER: order-pipeline-sql-sb
+      MSSQL_SA_PASSWORD: "ServiceBus123!"
+    volumes:
+      - ./ServiceBus.config.json:/ServiceBus.Emulator/ConfigFiles/ServiceBus.config.json
+    depends_on:
+      - sql-servicebus
