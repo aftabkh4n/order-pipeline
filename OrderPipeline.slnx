@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="OrderPipeline.Api/OrderPipeline.Api.csproj" />
+  <Project Path="OrderPipeline.Consumer/OrderPipeline.Consumer.csproj" />
+  <Project Path="OrderPipeline.Core/OrderPipeline.Core.csproj" />
+</Solution>
