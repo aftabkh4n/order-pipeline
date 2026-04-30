@@ -62,3 +62,13 @@ services:
       - ./ServiceBus.config.json:/ServiceBus.Emulator/ConfigFiles/ServiceBus.config.json
     depends_on:
       - sql-servicebus
+
+  postgres:
+    image: postgres:15
+    container_name: order-pipeline-postgres
+    environment:
+      POSTGRES_DB: orderpipelinedb
+      POSTGRES_USER: orderpipeline
+      POSTGRES_PASSWORD: orderpipeline123
+    ports:
+      - "5434:5432"
