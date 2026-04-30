@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using OrderPipeline.Api.Data;
 using OrderPipeline.Core.Interfaces;
 using OrderPipeline.Core.Models;
+using System.Text.Json;
 
 namespace OrderPipeline.Api.Controllers;
 
@@ -9,15 +11,18 @@ namespace OrderPipeline.Api.Controllers;
 public class OrdersController : ControllerBase
 {
     private readonly IOrderRepository _repository;
+    private readonly OrderDbContext _context;
     private readonly IOrderEventPublisher _publisher;
     private readonly ILogger<OrdersController> _logger;
 
     public OrdersController(
         IOrderRepository repository,
+        OrderDbContext context,
         IOrderEventPublisher publisher,
         ILogger<OrdersController> logger)
     {
         _repository = repository;
+        _context = context;
         _publisher = publisher;
         _logger = logger;
     }
@@ -39,13 +44,43 @@ public class OrdersController : ControllerBase
 
         order.TotalAmount = order.Items.Sum(i => i.TotalPrice);
 
-        var created = await _repository.CreateAsync(order);
+        // Write order and outbox message in the same transaction
+        using var transaction = await _context.Database.BeginTransactionAsync();
+        try
+        {
+            _context.Orders.Add(order);
+            await _context.SaveChangesAsync();
 
-        await _publisher.PublishToKafkaAsync(created, OrderEventType.OrderCreated);
+            // Create outbox message for Kafka publishing
+            var orderEvent = new OrderEvent
+            {
+                OrderId = order.Id,
+                EventType = OrderEventType.OrderCreated,
+                Payload = JsonSerializer.Serialize(order),
+                Source = "OrderPipeline.Api"
+            };
 
-        _logger.LogInformation("Order {OrderId} created and published to Kafka", created.Id);
+            var outboxMessage = new OutboxMessage
+            {
+                OrderId = order.Id,
+                EventType = OrderEventType.OrderCreated.ToString(),
+                Payload = JsonSerializer.Serialize(orderEvent)
+            };
 
-        return CreatedAtAction(nameof(GetOrder), new { id = created.Id }, created);
+            _context.OutboxMessages.Add(outboxMessage);
+            await _context.SaveChangesAsync();
+
+            await transaction.CommitAsync();
+
+            _logger.LogInformation("Order {OrderId} created and outbox message queued", order.Id);
+
+            return CreatedAtAction(nameof(GetOrder), new { id = order.Id }, order);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating order");
+            throw;
+        }
     }
 
     [HttpGet("{id}")]

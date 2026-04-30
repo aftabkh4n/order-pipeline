@@ -17,6 +17,7 @@ builder.Services.AddDbContext<OrderDbContext>(options =>
 
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddSingleton<IOrderEventPublisher, OrderEventPublisher>();
+builder.Services.AddHostedService<OutboxProcessorService>();
 
 var app = builder.Build();
 

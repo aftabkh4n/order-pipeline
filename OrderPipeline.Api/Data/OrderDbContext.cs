@@ -9,6 +9,7 @@ public class OrderDbContext : DbContext
 
     public DbSet<Order> Orders { get; set; }
     public DbSet<OrderItem> OrderItems { get; set; }
+    public DbSet<OutboxMessage> OutboxMessages { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -30,6 +31,15 @@ public class OrderDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ProductName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
+        });
+
+        modelBuilder.Entity<OutboxMessage>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.EventType).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Payload).IsRequired();
+            entity.Property(e => e.Error).HasMaxLength(500);
+            entity.HasIndex(e => new { e.Processed, e.CreatedAt });
         });
     }
 }
