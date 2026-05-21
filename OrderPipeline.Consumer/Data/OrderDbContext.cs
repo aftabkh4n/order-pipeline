@@ -10,6 +10,7 @@ public class OrderDbContext : DbContext
     public DbSet<Order> Orders { get; set; }
     public DbSet<OrderItem> OrderItems { get; set; }
     public DbSet<OutboxMessage> OutboxMessages { get; set; }
+    public DbSet<DeadLetterMessage> DeadLetterMessages { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -40,6 +41,14 @@ public class OrderDbContext : DbContext
             entity.Property(e => e.Payload).IsRequired();
             entity.Property(e => e.Error).HasMaxLength(500);
             entity.HasIndex(e => new { e.Processed, e.CreatedAt });
+        });
+
+        modelBuilder.Entity<DeadLetterMessage>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.EventType).IsRequired();
+            entity.Property(e => e.Payload).IsRequired();
+            entity.Property(e => e.FailureReason).IsRequired();
         });
     }
 }

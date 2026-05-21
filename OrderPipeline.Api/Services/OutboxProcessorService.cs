@@ -149,14 +149,40 @@ public class OutboxProcessorService : BackgroundService
             catch (Exception ex)
             {
                 message.RetryCount++;
-                // Guard against exceeding the column's max length (500)
-                message.Error = ex.Message.Length > 500 ? ex.Message[..500] : ex.Message;
+                var errorMessage = ex.Message.Length > 500 ? ex.Message[..500] : ex.Message;
 
-                _logger.LogWarning(
-                    ex,
-                    "Failed to process outbox message {MessageId}, retry count: {RetryCount}",
-                    message.Id,
-                    message.RetryCount);
+                if (message.RetryCount >= MaxRetries)
+                {
+                    var deadLetter = new DeadLetterMessage
+                    {
+                        OrderId = message.OrderId,
+                        EventType = message.EventType,
+                        Payload = message.Payload,
+                        OriginalCreatedAt = message.CreatedAt,
+                        DeadLetteredAt = now,
+                        FailureReason = errorMessage,
+                        RetryCount = message.RetryCount
+                    };
+                    context.DeadLetterMessages.Add(deadLetter);
+                    context.OutboxMessages.Remove(message);
+
+                    _logger.LogWarning(
+                        "Outbox message {MessageId} dead-lettered after {RetryCount} retries. OrderId: {OrderId}, EventType: {EventType}",
+                        message.Id,
+                        message.RetryCount,
+                        message.OrderId,
+                        message.EventType);
+                }
+                else
+                {
+                    message.Error = errorMessage;
+
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to process outbox message {MessageId}, retry count: {RetryCount}",
+                        message.Id,
+                        message.RetryCount);
+                }
             }
         }
 

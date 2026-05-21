@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using OrderPipeline.Api.Data;
 using OrderPipeline.Core.Interfaces;
 using OrderPipeline.Core.Models;
@@ -95,6 +96,15 @@ public class OrdersController : ControllerBase
     {
         var orders = await _repository.GetAllAsync();
         return Ok(orders);
+    }
+
+    [HttpGet("/api/deadletters")]
+    public async Task<IActionResult> GetDeadLetters()
+    {
+        var deadLetters = await _context.DeadLetterMessages
+            .OrderByDescending(d => d.DeadLetteredAt)
+            .ToListAsync();
+        return Ok(deadLetters);
     }
 
     [HttpPatch("{id}/status")]
